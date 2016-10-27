@@ -22,3 +22,5 @@ test/.script.py
 .vagrant/
 .coverage*
 coverage.xml
+
+java-utils/launcher/launcher.sh
