@@ -1,0 +1,45 @@
+total 80
+drwxrwxr-x. 2 rvais rvais  4096 Nov  4 18:25 .
+drwxrwxr-x. 3 rvais rvais  4096 Nov  4 16:20 ..
+-rwxrw-r--. 1 rvais rvais  2161 Nov  4 14:02 cpgenerator.py
+-rw-r--r--. 1 rvais rvais 12288 Nov  4 14:02 .cpgenerator.py.swp
+-rw-rw-r--. 1 rvais rvais     0 Nov  4 14:45 file
+-rw-rw-r--. 1 rvais rvais   116 Nov  4 16:23 jlauncher.cfg.ini
+-rwxrw-r--. 1 rvais rvais  5874 Nov  4 17:57 launcher.py
+-rw-r--r--. 1 rvais rvais 20480 Nov  4 17:57 .launcher.py.swp
+-rwxrw-r--. 1 rvais rvais  4325 Oct 20 16:50 launcher.sh
+lrwxrwxrwx. 1 rvais rvais    11 Nov  4 17:52 program -> launcher.py
+-rw-rw-r--. 1 rvais rvais   846 Oct 27 15:02 TODO
+-rw-r--r--. 1 rvais rvais 12288 Nov  4 14:04 .TODO.swp
+-rw-rw-r--. 1 rvais rvais     0 Nov  4 18:25 vypis.log
+
+
+
+$ ./program
+
+'HOME' = '/home/rvais'
+'MAVEN_REPO' = '$HOME/.m2/repository'
+'XDG_DATA_HOME' = '$HOME/.local/share'
+'XDG_CONFIG_HOME' = '$HOME/.config'
+'XDG_CACHE_HOME' = '$HOME/.cache'
+'XDG_CONFIG_DIRS' = '/etc/xdg'
+'XDG_DATA_DIRS' = '/usr/local/share:/usr/share'
+home: /home/rvais
+'program'
+'XDG_DATA_HOME' = '/home/rvais/tstenv/home/rvais/.local/share/'
+'XDG_DATA_DIRS' = '/home/rvais/tstenv/usr/local/share/:/home/rvais/tstenv/usr/share/'
+'XDG_CONFIG_DIRS' = '/home/rvais/tstenv/etc/xdg/'
+'MAVEN_REPO' = '/home/rvais/tstenv/home/rvais/.m2/repository/'
+'XDG_CONFIG_HOME' = '/home/rvais/tstenv/home/rvais/.config/'
+'HOME' = '/home/rvais/'
+'XDG_CACHE_HOME' = '/home/rvais/tstenv/home/rvais/.cache/'
+file '/home/rvais/tstenv/home/rvais/.config/program/jlauncher.cfg.ini' exists
+jvmbinary = /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.102-1.b14.fc24.x86_64/bin/java
+classpath = ~/PersonalProjects/HelloWorld/dist/HelloWorld.jar
+jvmoptions = 
+ignoreuserconfig = 
+abrtflag = 
+applargs = HelloWorld! Ahoja Marvel
+mainclass = helloworld.HelloWorld
+/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.102-1.b14.fc24.x86_64/bin/java  -classpath ~/PersonalProjects/HelloWorld/dist/HelloWorld.jar -Dmyownproperty="I have it!" helloworld.HelloWorld HelloWorld! Ahoja Marvel 
+Error: Could not find or load main class
