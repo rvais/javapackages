@@ -17,6 +17,8 @@ prog="program"          # any string, used only as declaration
 launcher="launcher.py"  # original name of a launcher script
 confPrefix="java-launcher/#/conf.ini"
 cpGeneratorPath=""      # path to class-path generator
+loggingLevel=logging.DEBUG
+logName="launcher.log"
 
 # dictionary containing setting for luncher that will be applied 
 cfg={"jvmbinary" : "java",    # JVM binary
@@ -53,9 +55,12 @@ def mkdirs(path):
             raise
 
 # Logging setup function
-def getLogger(name, level=logging.INFO):
+def getLogger(name, level=None):
     logger = logging.getLogger(name)
-    logger.setLevel(level)
+
+    if (level != None):
+        logger.setLevel(level)
+
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(asctime)s|[%(levelname)s] %(name)s: %(message)s")
     handler.setFormatter(formatter)
@@ -83,13 +88,13 @@ def getXDGvalues():
     for key, value in xdgDef.items():
         paths = value.split(':')
         for i in range(len(paths)):            
-            paths[i] = paths[i].replace("$HOME", home)
+            paths[i] = paths[i].replace("$HOME", os.environ["HOME"])
             paths[i] = paths[i].replace('//', '/')
 
         value = ':'.join(paths)
         xdgDef[key] = value
 
-        logger.debug("'%s'='%s'", key, env[key])
+        logger.debug("'%s' = '%s'", key, xdgDef[key])
 
     return xdgDef
 
@@ -112,7 +117,7 @@ def veryfiAndCorrectXDGcfg(xdg):
         return getXDGvalues()
   
     defaultsXDG = getXDGvalues()
-    for (key in somethingMissing):
+    for key in somethingMissing:
         xdg[key] = defaultsXDG[key];
 
     return xdg
@@ -126,8 +131,8 @@ def getSingileConfigPath(programName, xdgCfg):
     else :
         paths.append(xdgCfg)
 
-    for (path in paths):
-        filename = os.path.join(env[path, pathSufix)
+    for path in paths:
+        filename = os.path.join(path, pathSufix)
         if (os.path.exists(filename) and os.path.isfile(filename)):
             return path
     return None
@@ -155,7 +160,7 @@ def getEfectiveConfig(programName, xdg=None):
     #logger instance
     logger = getLogger(launcher)
 
-    for (path in cfgFiles):
+    for path in cfgFiles:
         if (path == None): # no such config was found, skipping ...
             continue
 
@@ -168,9 +173,9 @@ def getEfectiveConfig(programName, xdg=None):
             efectiveConfig[item] = value.strip('"')
 
         # print current configuration we have so far
-        loggin.debug("File: '" + path + "' included to configuration" )
+        logger.debug("File: '" + path + "' included to configuration" )
         for item, value in efectiveConfig.items():
-            loggin.debug(item + " = " + value)
+            logger.debug(item + " = " + value)
 
         # if processing of config files is supposed to be discontionued
         if (("skipMoreSpecificCfgs" in efectiveConfig) and
@@ -198,6 +203,7 @@ def getClasspathFromCache(progName, xdg=None):
 # main_________________________________________________________________________
 
 # set up loggin 
+logging.basicConfig(filename=logName,level=loggingLevel)
 logger = getLogger(launcher)
 
 # get program neame form symbolic link or first argument
@@ -215,7 +221,7 @@ prog = arg0
 logger.debug("Program name resolved: '%s'", prog)
 
 # get efective configuration
-efcfg = getEfectiveConfig()
+efcfg = getEfectiveConfig(prog)
 # check if all necesarry configuration is available (validation step)
 for item, value in cfg.items():
     if (item.startswith('jvmb') or item.startswith('main') or item.startswith("classpath")):
