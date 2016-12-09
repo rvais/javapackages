@@ -23,4 +23,5 @@ test/.script.py
 .coverage*
 coverage.xml
 
-java-utils/launcher/launcher.sh
+java-utils/launcher/auxiliary/
+java-utils/launcher/program
