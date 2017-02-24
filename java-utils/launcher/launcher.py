@@ -9,8 +9,11 @@ import os               # environment variables of the shell/machine
 import errno            # errno for mkdirs function
 import subprocess       # for launching another application
 import logging          # python logging module
+import itertools        # iteration tool of python
+import re               # regex
 
 import configparser     # ini file parsing module
+import shlex            # unix/shell like sting parser
 import pudb             # debuger
 
 # definiton of var & const_____________________________________________
@@ -38,7 +41,7 @@ launcher = "launcher"
 launcher_py = "launcher.py"
 cfg_name = "jlauncher.ini"
 
-halt_launch = True
+halt_launch = False
 
 # efective configuration 
 cfg = dict()
@@ -62,6 +65,8 @@ def print_help():
 
 
 
+# taken from stack overflow
+# <http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python>
 def mkdirs(path):
     try:
         os.makedirs(path)
@@ -154,7 +159,16 @@ def get_config_path(name, xdg_path, filename=cfg_name):
 
 
 def parse_cfg_value(value):
-    # TODO: implement
+    boolean = value.lower();
+    if (boolean == "true"):
+        value = True
+
+    elif (boolean == "false"):
+        value = False
+
+    if (isinstance(value, str)):
+        value = shlex.split(value)
+
     return value
 
 
@@ -169,7 +183,15 @@ def process_configuration(config_parser, cfg):
     for section in config_parser.sections():
         cfg[section] = dict()
         for option, value in config_parser[section].items():
-            cfg[section][option] = parse_cfg_value(value)
+            value = parse_cfg_value(value)
+
+            # class path has to be garanteed to be expanded
+            if (section == "jvm" and option == "classPath"):
+                for i, item in enumerate(value):
+                    value[i] = os.path.expanduser(value[i])
+                    value[i] = os.path.expandvars(value[i])
+
+            cfg[section][option] = value
 
     return True;
 
@@ -469,16 +491,24 @@ if (cfg["jvm"]["classPath"] == "dynamic"):
     exit(0);
 
 # launch the application
-args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], "-classpath",
+args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], ["-classpath"],
         cfg["jvm"]["classPath"], cfg["jvm"]["mainClass"],
         cfg["application"]["arguments"]
 ]
+
+args = list(itertools.chain.from_iterable(args))
 
 # filter nonexisting options and empty strings
 args = list(filter(None, args))
 args = list(filter(lambda x: (x is not None and x != ""), args))
 
-cmd_string = " ".join(args)
+print_args = list()
+for arg in args:
+    if (re.search(r"\s", arg)):
+        arg = '"{}"'.format(arg)
+    print_args.append(arg)
+
+cmd_string = " ".join(print_args)
 logger.info("Launching application: '%s'", cmd_string)
 
 # if I dont want actualy launch application during testing
