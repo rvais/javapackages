@@ -8,130 +8,125 @@
 
 # definiton of variables 
 CFG_FILE="jlauncher.ini" # default name of config file for launcher
-TEST_ENV="$HOME/tstenv" # abs path to dir here to create test env | empty
+TEST_ENV="./tstenv" # abs path to dir here to create test env | empty
 APP_NAME="program"
 LAUNCHER="launcher"
+LOG_FILE_NAME="launcher.log"
+PATH_TO_CFG_FILES="./resources"
+PATH_TO_LOG_FILES="./logs"
 
-ONLY_SETUP=false
-VERBOSE=false
-RMLOG=true
+# array of specific subdirectories
+declare -A SUBDIRS
+SUBDIRS["XDG_CONFIG_DIRS"]="$LAUNCHER"
+SUBDIRS["XDG_DATA_DIRS"]="$APP_NAME"
+SUBDIRS["XDG_CONFIG_HOME"]="$LAUNCHER"
+SUBDIRS["XDG_DATA_HOME"]="$APP_NAME"
+SUBDIRS["XDG_CACHE_HOME"]="$APP_NAME"
 
-# definition of functions
+# definition of test cases
+function __runTest {
+  eval "./$APP_NAME" > "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
+                    2> "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stderr" 
 
-function systemCFG {
+  echo $? >> "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout"
 
-  if [ "$2" = true ]; then
-      echo "$1  #$FUNCNAME"
+  # if there is a log, move it
+  if [ -f "./$LOG_FILE_NAME" ]; then
+    mv -T "./$LOG_FILE_NAME" \
+             "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.$LOG_FILE_NAME"
   fi
 
-  touch "$1"
-  cat > "$1" <<- EOM
-		[jvm]
-		jvmBinary=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.121-1.b14.fc24.x86_64/bin/java
-		options=
-EOM
+  diff "$1" "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
+      &> "/dev/null"
+
+  return "$?"
 }
 
-function basicCFG {
+function __initTest {
+  # combine all paths so they can be created in single loop
+  DIRS="$XDG_DATA_DIRS:$XDG_CONFIG_DIRS"
+  DIRS="$DIRS:$XDG_DATA_HOME:$XDG_CONFIG_HOME:$XDG_CACHE_HOME"
 
-  if [ "$2" = true ]; then
-      echo "$1  #$FUNCNAME"
+  # create test environment if it does not exixts
+  if [ ! -d "$TEST_ENV" ] ; then
+    SEP=$IFS
+    IFS=":"
+
+    for D in $DIRS
+    do
+      mkdir -p -v "${D%/}/$APP_NAME"
+      mkdir -p -v "${D%/}/$LAUNCHER"
+    done
+    IFS=$SEP
   fi
 
-  touch "$1"
-  cat > "$1" <<- EOM
-		[launcher]
-		stopFurtherConfigProcessing=true
-		[jvm]
-		classPath=~/PersonalProjects/HelloWorld/dist/HelloWorld.jar
-		mainClass=helloworld.HelloWorld
-EOM
-}
-
-function appCFG {
-
-  if [ "$2" = true ]; then
-      echo "$1  #$FUNCNAME"
+  if [ ! -d "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}" ]; then
+    mkdir -p "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}"
   fi
 
-  touch "$1"
-  cat > "$1" <<- EOM
-		[launcher]
-		enableAbrt=true
-		stopFurtherConfigProcessing=false
-		[jvm]
-		classPath=~/PersonalProjects/HelloWorld/dist/HelloWorld.jar
-		mainClass=helloworld.HelloWorld
-		[application]
-		arguments=HelloWorld! Ahoja Marvel
-EOM
+  # clean after previous tests
+  SEP=$IFS
+  IFS=":"
+
+  for D in $DIRS
+  do
+    if [ -f "${D%/}/$APP_NAME/$CFG_FILE" ]; then
+      rm "${D%/}/$APP_NAME/$CFG_FILE"
+    fi
+    if [ -f "${D%/}/$LAUNCHER/$CFG_FILE" ]; then
+      rm "${D%/}/$LAUNCHER/$CFG_FILE"
+    fi
+  done
+  IFS=$SEP
+
+  # copy all config files to right places 
+  FLS=`ls "${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}"`
+  for FL in $FLS
+  do
+    if [ ${FL:0:3} != "XDG" ]; then
+      continue
+    fi
+
+    # remove ".ini" suffix
+    CFG_NAME=${FL::(-4)}
+
+    # pick correct subdirectory - /application || /launcher
+    # from predefined array
+    SUBDIR="${SUBDIRS[$CFG_NAME]}"
+
+    # expand directory list and pic destionation
+    DEST=`cut -d":" -f1 <<< "${!CFG_NAME}"`
+
+    # copy the file
+    cp -T "${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}/$FL" \
+          "$DEST/$SUBDIR/$CFG_FILE"
+  done
+
+  return 0
 }
 
-function appIncorrectCFG {
-
-  if [ "$2" = true ]; then
-      echo "$1  #$FUNCNAME"
-  fi
-
-  touch "$1"
-  cat > "$1" <<- EOM
-		[launcher]
-		enableAbrt=false
-		stopFurtherConfigProcessing=false
-		[jvm]
-		jvmBinary=/usr/lib/nonsence 
-		classPath=~/PersonalProjects/HelloWorld/dist/HelloWorld.jar
-		mainClass=helloworld.HelloWorld
-		[application]
-		arguments="HelloWorld! Ahoja Marvel"
-EOM
+function BasicTest {
+  __initTest
+  __runTest "${PATH_TO_CFG_FILES%/}/$FUNCNAME/expected.out"
+  return "$?"
 }
 
-function completeCFG {
-
-  if [ "$2" = true ]; then
-      echo "$1  #$FUNCNAME"
-  fi
-
-  touch "$1"
-  cat > "$1" <<- EOM
-		[launcher]
-		enableAbrt=false
-		stopFurtherConfigProcessing=false
-		[jvm]
-		jvmBinary=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.121-1.b14.fc24.x86_64/bin/java
-		classPath=~/PersonalProjects/HelloWorld/dist/HelloWorld.jar
-		options=-DsystemOption=vlaue
-		mainClass=helloworld.HelloWorld
-		[application]
-		     # some kind of indented comment
-		arguments=HelloWorld! "Ahoja Marvel"
-		    indentedArgument
-EOM
-}
 
 ###=== start script ===###
 
-if [ "$1" == "-v" -o "$2" == "-v" ] ; then
-  VERBOSE=true
-fi
-
-if [ "$1" == "-r" -o "$2" == "-r" ]; then
-  rm -r -v "$TEST_ENV"
-fi
-
-
-if [ "$RMLOG" = true ]; then
-  rm "./launcher.log"
+if [ ! -d "$PATH_TO_CFG_FILES" ]; then
+  echo "Havent found directory with cfg files for ndividual test cases!" \
+       "Exiting ..."
+  exit 1
 fi
 
 # check env. variables and if empty set default
 if [ -z $XDG_DATA_HOME ] ; then
-  XDG_DATA_HOME="$HOME/.local/share"
+  XDG_DATA_HOME="${HOME%/}/.local/share"
 fi
 
 if [ -z $XDG_CONFIG_HOME ] ; then
-  XDG_CONFIG_HOME="$HOME/.config"
+  XDG_CONFIG_HOME="${HOME%/}/.config"
 fi
 
 if [ -z $XDG_DATA_DIRS ] ; then
@@ -143,23 +138,16 @@ if [ -z $XDG_CONFIG_DIRS ] ; then
 fi
 
 if [ -z $XDG_CACHE_HOME ] ; then
-  XDG_CACHE_HOME="$HOME/.cache"
+  XDG_CACHE_HOME="${HOME%/}/.cache"
 fi
 
-# definition of 
-
-
-# set test enviroment
-# --------------------------------------
-# This adds contets of $TEST_ENV as a prefix (unless empty string)
-# to the XDG directory structure so normal user environment is
-# not poluted by random luncher config files. Usefull for testing
-# purposes only. Won't be in "final" proof of concept version
-# 
+# set up test enviroment
 if [ -n "$TEST_ENV" ] ; then
-  XDG_DATA_HOME="$TEST_ENV${XDG_DATA_HOME%/}/"
-  XDG_CONFIG_HOME="$TEST_ENV${XDG_CONFIG_HOME%/}/"
-  XDG_CACHE_HOME="$TEST_ENV${XDG_CACHE_HOME%/}/"
+
+  # make sure that all paths do not end with slash
+  XDG_DATA_HOME="${TEST_ENV%/}/${XDG_DATA_HOME#/}"
+  XDG_CONFIG_HOME="${TEST_ENV%/}/${XDG_CONFIG_HOME#/}"
+  XDG_CACHE_HOME="${TEST_ENV%/}/${XDG_CACHE_HOME#/}"
 
   SEP=$IFS
   IFS=":"
@@ -167,7 +155,7 @@ if [ -n "$TEST_ENV" ] ; then
   DIRS=""
   for D in $XDG_DATA_DIRS
   do
-    DIRS="$DIRS:$TEST_ENV${D%/}/"
+    DIRS="$DIRS:${TEST_ENV%/}/${D#/}"
   done
 
   XDG_DATA_DIRS=${DIRS:1}
@@ -175,106 +163,38 @@ if [ -n "$TEST_ENV" ] ; then
   DIRS=""
   for D in $XDG_CONFIG_DIRS
   do
-    DIRS=":$DIRS$TEST_ENV${D%/}/"
+    DIRS="$DIRS:${TEST_ENV%/}/${D#/}"
   done
 
   XDG_CONFIG_DIRS=${DIRS:1}
 
   IFS=$SEP
 
-#  echo "XDG_DATA_HOME: $XDG_DATA_HOME"
-#  echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
-#  echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
-#  echo "XDG_DATA_DIRS: $XDG_DATA_DIRS"
-#  echo "XDG_CONFIG_DIRS: $XDG_CONFIG_DIRS"
+  echo "XDG_DATA_HOME: $XDG_DATA_HOME"
+  echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
+  echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
+  echo "XDG_DATA_DIRS: $XDG_DATA_DIRS"
+  echo "XDG_CONFIG_DIRS: $XDG_CONFIG_DIRS"
+  echo "-------------------------------------------------------------------------------"
+fi
 
-  if [ ! -d "$TEST_ENV" ] ; then
+# export XDG for tests to run in 
+export XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_DIRS XDG_CONFIG_DIRS
 
-    if [ "$VERBOSE" = true ]; then
-      echo "-----------------------------------------------------------------------------"
-    fi
+#run all the test cases
+echo "Running following test cases:"
+FUNCTIONS=`grep -e "^function [^_]" $0 | awk -F ' ' '{print $2}'`
 
-    DIRS="$DIRS:$XDG_DATA_DIRS:$XDG_CONFIG_DIRS"
-    DIRS="$XDG_DATA_HOME:$XDG_CONFIG_HOME:$XDG_CACHE_HOME"
-
-    SEP=$IFS
-    IFS=":"
-
-    for D in $DIRS
-    do
-      
-      case "$((RANDOM % 3))" in
-        "0")
-          PICKED=""
-        ;;
-        "1")
-          PICKED="$D$APP_NAME"
-        ;;
-        "2")
-          PICKED="$D$LAUNCHER"
-        ;;
-      esac
-
-      if [ -z $PICKED ]; then 
-        continue
-      fi
-
-      mkdir -p "$PICKED"
-
-      case "$((RANDOM % 8))" in 
-        "2")
-          systemCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-        "0" | "3")
-          basicCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-        "4")
-          appCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-        "1" | "5")
-          appIncorrectCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-        "6")
-          completeCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-        "7")
-          appIncorrectCFG "$PICKED/$CFG_FILE" $VERBOSE
-        ;;
-      esac
-
-    done
-    IFS=$SEP   
-
-  else 
-    if [ "$VERBOSE" = true ]; then
-      echo "-----------------------------------------------------------------------------"
-      find $TEST_ENV -iname jlauncher.ini
-    fi
+for TEST_CASE in "$FUNCTIONS"
+do
+  RESULT="Failed!"
+  eval "$TEST_CASE"
+  if [ "$?" == 0 ]; then
+    RESULT="Pass ..."
   fi
-fi
 
-# export XDG for child proceses
-export -p  XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_DIRS XDG_CONFIG_DIRS
-
-if [ "$VERBOSE" = true ]; then
-  echo "-----------------------------------------------------------------------------"
-  printenv | grep "XDG_"
-  echo "-----------------------------------------------------------------------------"
-fi
-
-if [ "$ONLY_SETUP" = true ]; then
-    echo "Stop!"
-    exit 0;
-fi
-
-echo "Running ..."
-
-# try to run java launcher
-eval "./$APP_NAME"
-RETCODE="$?"
-echo "-----------------------------------------------------------------------------"
-echo "./$APP_NAME exited with: $RETCODE"
-
+  echo "$TEST_CASE: $RESULT"
+done
 
 
 
