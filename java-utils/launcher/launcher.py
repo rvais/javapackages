@@ -91,11 +91,17 @@ def get_logger(name=launcher, level=None, sfx=None):
 
     logger = logging.getLogger(name)
 
-    if (level != None):
+    if (level == None):
         logger.setLevel(loglvl)
 
     if (not logger.hasHandlers()): 
         handler = logging.StreamHandler()
+        formatter = logging.Formatter("[%(levelname)s]: %(message)s")
+        handler.setFormatter(formatter)
+        handler.setLevel(logging.ERROR)
+        logger.addHandler(handler)
+
+        handler = logging.FileHandler(logname)
         formatter = logging.Formatter("%(asctime)s|[%(levelname)s] %(name)s: %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
@@ -314,8 +320,6 @@ def validate_cfg(cfg):
 
 
 # Main_________________________________________________________________
-
-logging.basicConfig(filename=logname,level=loglvl)
 logger = get_logger()
 
 set_xdg_cfg(xdg_cfg);
@@ -513,6 +517,7 @@ logger.info("Launching application: '%s'", cmd_string)
 
 # if I dont want actualy launch application during testing
 if (halt_launch == True):
+    print(cmd_string)
     exit(0)
 
 # actual launch of application
