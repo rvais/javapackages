@@ -441,8 +441,8 @@ prog = arg0
 logger.debug("Program name resolved: '%s'", prog)
 
 # prepare dictionary for individual configurations
-cfg_file_list = ["cfg_cahe", "system_cfg", "app_generic",
-        "user_generic", "user_app_specific"]
+cfg_file_list = ["system_cfg", "app_generic",
+        "user_generic", "user_app_specific", "cfg_cahe"]
 cfg_fs = dict.fromkeys(cfg_file_list);
 
 # file : path, mtime, config parser instance
@@ -488,10 +488,13 @@ for fl in cfg_file_list:
                 cfg_fs[fl]["path"])
         continue
 
-    pudb.set_trace()
+##    pudb.set_trace()
 
-    if (("stopFurtherConfigProcessing" in cfg_fs[fl]["cfg"]) and
-        (cfg_fs[fl]["cfg"]["stopFurtherConfigProcessing"] == True)):
+    if (("launcher" in cfg_fs[fl]) and
+            ("stopFurtherConfigProcessing" in 
+                cfg_fs[fl]["cfg"]["launcher"]) and
+            (cfg_fs[fl]["cfg"]["launcher"]["stopFurtherConfigProcessing"]
+                == True)):
         logger.info("Config file '%s' sets flag to stop further"
                     + " processing. Only already read configuration"
                     + " will be used.", cfg_fs[fl]["path"])
@@ -557,10 +560,15 @@ args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], ["-classpath"],
         cfg["application"]["arguments"]
 ]
 
+# "jvm.options" and "application.arguments" are not required and they
+# are set as None if missing - Non is not itreable following line fixes
+# that issue
+args = list(filter(None, args))
+
+# we have a list of lists that needs to be flatened with predefined order
 args = list(itertools.chain.from_iterable(args))
 
 # filter nonexisting options and empty strings
-args = list(filter(None, args))
 args = list(filter(lambda x: (x is not None and x != ""), args))
 
 print_args = list()

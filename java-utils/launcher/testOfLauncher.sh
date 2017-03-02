@@ -19,7 +19,7 @@ PATH_TO_LOG_FILES="./logs"
 SKIP_TEST=false       # add 'SKIP_TEST=true' to specific test case
 SKIP_RETCODE=3        # change value if it colides with $? of application
 RUN_COVERAGE=false    # set to 'true' if code coverage should be made
-DEBUG_TESTED=true
+DEBUG_TESTED=false
 
 # array of specific subdirectories
 declare -A SUBDIRS
