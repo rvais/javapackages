@@ -406,8 +406,8 @@ def cache_dynamic_cp(classpath, digest, path=None):
 
     # create dictionary of values to store in cache file
     iniParser = get_ini_parser() 
-    iniParser["jvm"]["cpHash"] = digest
-    iniParser["jvm"]["genPath"] = classpath
+    iniParser["launcher"]["cpHash"] = digest
+    iniParser["launcher"]["genPath"] = classpath
 
     try:
         with open(path, 'w') as config:
