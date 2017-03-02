@@ -11,6 +11,7 @@ import subprocess       # for launching another application
 import logging          # python logging module
 import itertools        # iteration tool of python
 import re               # regex
+import hashlib          #hashing algorithms for dynamic class path
 
 import configparser     # ini file parsing module
 import shlex            # unix/shell like sting parser
@@ -41,21 +42,28 @@ launcher = "launcher"
 launcher_py = "launcher.py"
 cfg_name = "jlauncher.ini"
 
-halt_launch = False
+halt_launch = True
 
 # efective configuration 
 cfg = dict()
 
-# required and optional values idn configuration
+# required and optional values in configuration
 cfg_requires = {
-    "jvm" : ["jvmBinary", "classPath", "mainClass"] # , "", ""
+    "jvm" : ["jvmBinary"], # , "", ""
+    "application" : ["classPath", "mainClass"] 
 }
 
-cfg_optional = {
-    # "launcher" : ["enableAbrt", "stopFurtherConfigProcessing"]
+cfg_optionals = {
     "jvm" : ["options"], # , "", ""
     "application" : ["arguments"] 
     
+}
+
+# values that should be parsed during processing
+cfg_parse = {
+    "launcher" : ["stopFurtherConfigProcessing", "enableAbrt", "generator"],
+    "jvm" : ["jvmBinary", "options"], # , "", ""
+    "application" : ["arguments", "classPath", "mainClass"] 
 }
 
 # definiton of functions_______________________________________________
@@ -78,6 +86,11 @@ def mkdirs(path):
 
 
 
+def is_executable(path):
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+
 def get_ini_parser():
     iniParser = configparser.ConfigParser(empty_lines_in_values=False)
     iniParser.optionxform = str
@@ -91,19 +104,24 @@ def get_logger(name=launcher, level=None, sfx=None):
 
     logger = logging.getLogger(name)
 
+    # logging level for whole logger
+    # can chnge log level in a subsequent call
     if (level == None):
         logger.setLevel(loglvl)
 
     if (not logger.hasHandlers()): 
+        # handler for stderr
         handler = logging.StreamHandler()
         formatter = logging.Formatter("[%(levelname)s]: %(message)s")
         handler.setFormatter(formatter)
-        handler.setLevel(logging.ERROR)
+        handler.setLevel(logging.ERROR) # only erros are needed
         logger.addHandler(handler)
 
+        # handler for logging to file
         handler = logging.FileHandler(logname)
         formatter = logging.Formatter("%(asctime)s|[%(levelname)s] %(name)s: %(message)s")
         handler.setFormatter(formatter)
+        # logs everithing that goes to the logger
         logger.addHandler(handler)
 
     return logger
@@ -188,16 +206,22 @@ def process_configuration(config_parser, cfg):
 
     for section in config_parser.sections():
         cfg[section] = dict()
-        for option, value in config_parser[section].items():
-            value = parse_cfg_value(value)
+        for field, value in config_parser[section].items():
+            if (section == "application" and field == "classPath" and
+                    value == "dynamic"):
+                continue
+            
+            if (section in cfg_parse and field in cfg_parse[section]):
+                value = parse_cfg_value(value)
 
             # class path has to be garanteed to be expanded
-            if (section == "jvm" and option == "classPath"):
+            if ((section == "application" and field == "classPath") or
+                    (section == "launcher" and field == "generator")):
                 for i, item in enumerate(value):
                     value[i] = os.path.expanduser(value[i])
                     value[i] = os.path.expandvars(value[i])
 
-            cfg[section][option] = value
+            cfg[section][field] = value
 
     return True;
 
@@ -215,12 +239,15 @@ def clone_ini_cfg(source, clone):
         if (isinstance(source[key], dict)):
             clone[key] = dict()
             for option, value in source[key].items():
-                clone[key][option] = value
+                if (isinstance(value, list)):
+                    clone[key][option] = list(value)
+                elif (isinstance(value, dict)):
+                    clone[key][option] = dict(value)
+                else:
+                    clone[key][option] = value
 
         if (isinstance(source[key], list)):
-            clone[key] = list()
-            for value in source[key].items():
-                clone[key].append(value)
+            clone[key] = list(source[key])
 
         clone[key] = item
 
@@ -231,7 +258,7 @@ def clone_ini_cfg(source, clone):
 # Merges two processed configurations in a way that values form
 # "what" configuration overrides values from "into" configuration.
 # @param dictionary with configuration to merge into 
-# @param dictioanry with configuration to coppy from
+# @param dictionary with configuration to coppy from
 # @param boolean deciding if "into" configuration should be cloned
 #        or merged into. If True, duplicate will be created, otherwise
 #        it will be merged. Default value is True.
@@ -255,22 +282,38 @@ def merge_configuration(into, what, clone=True, aor=False):
     if (not isinstance(target, dict) or not isinstance(source, dict)):
         return None
 
-    for key, value in source.items():
-        if (key in target and isinstance(source[key], dict)):
-            if (not isinstance(target[key], dict) and clone == True):
-                target[key] = dict();
-                for option, value in source[key].items():
-                    target[key][option] = value
-            
-        if (not key in target and aor == True):
+    for key, fields in source.items():
+        if (key not in target and aor == True):
             continue
+        elif (key not in target):
+            target[key] = None
 
-        if (not isinstance(source[key], dict) or clone == False):
-            target[key] = value
+        if (clone == True):
+            # if target is not a dictionary, override
+            if (not isinstance(target[key], dict) and
+                     isinstance(source[key], dict)):
+                target[key] = dict(source[key]);
 
-    for key, value in target.items():
-        if (not key in source and aor == True):
-            del target[key]
+        # if target and source are dictionaries only override
+        # and add values, fields that are not in source must stay intact
+        if (isinstance(target[key], dict) and 
+                isinstance(source[key], dict)):
+            for field, value in source[key].items():
+                target[key][field] = value
+
+        # if clone is not active 
+        else :
+            target[key] = fields
+
+    if (aor == True):
+        for key, fields in target.items():
+            if (key not in source):
+                del target[key]
+                continue
+
+            for field, value in target[key]:
+                if (field not in source[key]):
+                    del target[key][field]
 
     return target
 
@@ -281,7 +324,7 @@ def validate_cfg(cfg):
     logger.info("Validating configuration for required values.")
     cfg_valid = True
 
-    for section, options in cfg_requires.items():
+    for section, fields in cfg_requires.items():
         if ((section not in cfg) or
                 (not isinstance(cfg[section], dict))):
             logger.info("Final configuration missing required"
@@ -289,36 +332,96 @@ def validate_cfg(cfg):
             cfg_valid = False
             break
 
-        for option in options:
-            if (option not in cfg[section]):
+        for field in fields:
+            if (field not in cfg[section]):
                 logger.info("Final configuration missing required"
-                            + " option '%s' in section '%s'",
-                            option, section)
+                            + " field '%s' in section '%s'",
+                            field, section)
                 cfg_valid = False
                 break
+
+            # if classpath is supposed to be dynamic there are more
+            # required fields 
+            if (section == "application" and
+                    field == "classPath" and 
+                    cfg[section][field] == "dynamic"):
+
+                new_requires = ["generator", "genInput"]
+                new_optionals = ["cpHash", "genPath"]
+
+                if ("launcher" not in cfg_requires):
+                    cfg_requires["launcher"] = new_requires
+                else :
+                    cfg_requires["launcher"].extend(new_requires)
+
+                if ("launcher" not in cfg_optional):
+                    cfg_optionals["launcher"] = new_optionals
+                else :
+                    cfg_optionals["launcher"].extend(new_optionals)
+
+            if ((section == "jvm" and field == "jvmBinary") or
+                    (section == "launcher" and field == "generator")):
+                if (not is_executable(cfg[section][field][0])):
+                    # cfg[section][field] is a list so "[0]" is necessary
+                    cfg_valid = False
+                    break
 
     if (cfg_valid == False):
         logger.debug(cfg)
 
         return cfg_valid
 
-    for section, options in cfg_optional.items():
+    for section, fields in cfg_optionals.items():
         if ((section not in cfg) or
                 (not isinstance(cfg[section], dict))):
             logger.debug("Filling in omitted section '%s' to"
                         + " final configuration", section)
             cfg[section] = dict()
 
-        for option in options:
-            if (option not in cfg[section]):
-                logger.info("Filling in omitted option '%s' in"
-                            + " section '%s'", option, section)
-                cfg[section][option] = None
+        for field in fields:
+            if (field not in cfg[section]):
+                logger.info("Filling in omitted field '%s' in"
+                            + " section '%s'", field, section)
+                cfg[section][field] = None
 
     return True
    
 
 
+def cache_dynamic_cp(classpath, digest, path=None):
+    # check or create the path for file
+    if (path is None or len(path) == 0):
+        d = os.path.join(xdg_cfg["XDG_CACHE_HOME"], prog)
+        path = os.path.join(d, cfg_name)
+
+    # directory for cache file must exist
+    if (not os.path.isdir(d)):
+        try:
+            mkdirs(d)
+        except:
+            logger.error("Directory '%s' used to store cached config"
+                + " file for launching application next time"
+                + " does not exist and could not be created.", d)
+            return None
+
+    # create dictionary of values to store in cache file
+    iniParser = get_ini_parser() 
+    iniParser["jvm"]["cpHash"] = digest
+    iniParser["jvm"]["genPath"] = classpath
+
+    try:
+        with open(path, 'w') as config:
+            iniParser.write(config)
+        logger.info("Cached config file created")
+
+    except:
+        logger.error("Could not create or write into cache config"
+                + " file '%s' used to store processed configuration.",
+                path)
+
+
+    return None
+ 
 # Main_________________________________________________________________
 logger = get_logger()
 
@@ -358,145 +461,99 @@ cfg_fs["user_app_specific"]["path"] = get_config_path(prog, '%s:%s'
     % (xdg_cfg["XDG_CONFIG_HOME"], xdg_cfg["XDG_DATA_HOME"]))
 cfg_fs["cfg_cahe"]["path"] = get_config_path(prog, xdg_cfg["XDG_CACHE_HOME"])
 
-# verify that cache is not older than static cfg files
-cache_up_to_date = True
-mtime = None
-
+# prepare efective config
 for fl in cfg_file_list:
-    path = cfg_fs[fl]["path"]
+    iniParser = get_ini_parser() 
 
-    if ((fl != "cfg_cahe" and mtime is None) or
-            (fl == "cfg_cahe" and path is None)):
-        cache_up_to_date = False
-        break
-
-    if path is None:
+    # no such config was found (should never happend), skipping ...
+    if (cfg_fs[fl]["path"] is None): 
+        logger.info("Config file '%s' (internal name)"
+                     + " not found. Skipping file.", fl)
         continue
 
-    cfg_fs[fl]["mtime"] = os.path.getmtime(path)
-
-    if (fl == "cfg_cahe"):
-        mtime = cfg_fs[fl]["mtime"]
-
-    if (mtime < cfg_fs[fl]["mtime"]):
-        cache_up_to_date = False
+    # read configuration
+    try:
+        logger.info("Reading configuration from '%s' file at '%s'",
+                fl, cfg_fs[fl]["path"])
+        iniParser.read_file(open(cfg_fs[fl]["path"]))
+    except:
+        logger.error("Configuration could not be parsed."
+                     + " Stopping further processing.")
         break
 
-# prepare efective config
-if (cache_up_to_date):
-    # create new instance of ini-file parser (to be safe)
-    iniParser = get_ini_parser()
-    iniParser.read_file(open(cfg_fs["cfg_cahe"]["path"]))
+    # proces the values
+    if (not process_configuration(iniParser, cfg_fs[fl]["cfg"])):
+        logger.error("Configuration in file '%s' could not be"
+                + "be processed. Skipping file.",
+                cfg_fs[fl]["path"])
+        continue
 
-    # process and validate
-    if (not process_configuration(iniParser, cfg)):
-        logger.error("Cached configuration in file '%s' could not be"
-            + "be processed. Removing file. Please relunch application.",
-             cfg_fs["cfg_cahe"]["path"])
-        os.remove(cfg_fs["cfg_cahe"]["path"])
-        exit(3)
+    pudb.set_trace()
 
-    if (not validate_cfg(cfg)):
-        logger.error("Final configuration does not have all the required"
-                     + " values. Please verify configuration files.")
-        exit(2)
-    
-else:
-    for fl in cfg_file_list:
-        iniParser = get_ini_parser() 
+    if (("stopFurtherConfigProcessing" in cfg_fs[fl]["cfg"]) and
+        (cfg_fs[fl]["cfg"]["stopFurtherConfigProcessing"] == True)):
+        logger.info("Config file '%s' sets flag to stop further"
+                    + " processing. Only already read configuration"
+                    + " will be used.", cfg_fs[fl]["path"])
+        break
 
-        # no such config was found (should never happend), skipping ...
-        if (cfg_fs[fl]["path"] is None): 
-            logger.info("Config file '%s' (internal name)"
-                         + " not found. Skipping file.", fl)
-            continue
+# merge to final effective configuration
+for fl in cfg_file_list:
+    if (cfg_fs[fl]["cfg"] is None or  len(cfg_fs[fl]["cfg"]) == 0):
+        continue
 
-        # read configuration
-        try:
-            logger.info("Reading configuration from '%s' file at '%s'",
-                    fl, cfg_fs[fl]["path"])
-            iniParser.read_file(open(cfg_fs[fl]["path"]))
-        except:
-            logger.error("Configuration could not be parsed."
-                         + " Stopping further processing.")
-            break
+    logger.debug("Config '%s': %s", fl, cfg_fs[fl]["cfg"])
+    cfg = merge_configuration(cfg, cfg_fs[fl]["cfg"])
 
-        # proces the values
-        if (not process_configuration(iniParser, cfg_fs[fl]["cfg"])):
-            logger.error("Configuration in file '%s' could not be"
-                    + "be processed. Skipping file.",
-                    cfg_fs[fl]["path"])
-            continue
+# validate configuration 
+if (not validate_cfg(cfg)):
+    logger.error("Final configuration does not have all the required"
+                 + " values. Please verify configuration files.")
+    exit(2)
 
-       # pudb.set_trace()
-
-        if (("stopFurtherConfigProcessing" in cfg_fs[fl]["cfg"]) and
-            (cfg_fs[fl]["cfg"]["stopFurtherConfigProcessing"] == True)):
-            logger.info("Config file '%s' sets flag to stop further"
-                        + " processing. Only already read configuration"
-                        + " will be used.", cfg_fs[fl]["path"])
-            break
-
-    # merge to final effective configuration
-    for fl in cfg_file_list:
-        if (cfg_fs[fl]["cfg"] is None or  len(cfg_fs[fl]["cfg"]) == 0):
-            continue
-
-        logger.debug("Config '%s': %s", fl, cfg_fs[fl]["cfg"])
-        clone_ini_cfg(cfg_fs[fl]["cfg"], cfg)
-
-        cfg = merge_configuration(cfg, cfg_fs[fl]["cfg"])
-
-    # validate configuration 
-    if (not validate_cfg(cfg)):
-        logger.error("Final configuration does not have all the required"
-                     + " values. Please verify configuration files.")
-        exit(2)
-
-    # if there is not already existing cache file get path to store one
-    if (cfg_fs["cfg_cahe"]["path"] is None or 
-            len(cfg_fs["cfg_cahe"]["path"]) == 0):
-        d = os.path.join(xdg_cfg["XDG_CACHE_HOME"], prog)
-        cfg_fs["cfg_cahe"]["path"] = os.path.join(d, cfg_name)
-
-        if (not os.path.isdir(d)):
-            try:
-                mkdirs(d)
-            except:
-                cfg_fs["cfg_cahe"]["path"] = None
-                logger.error("Directory '%s' used to store cached config"
-                        + " file for launching application next time"
-                        + " does not exist and could not be created.", d)
-        
- 
-    # create cache file for later use (next lauch)
-    if (cfg_fs["cfg_cahe"]["path"] is not None and
-            cache_up_to_date == False):
-        iniParser = get_ini_parser() 
-        iniParser.read_dict(cfg)
-
-        try:
-            with open(cfg_fs["cfg_cahe"]["path"], 'w') as config:
-                iniParser.write(config)
-            logger.info("Cached config file created")
-
-        except:
-            logger.error("Could not create or write into cache config"
-                    + " file '%s' used to store processed configuration.",
-                    cfg_fs["cfg_cahe"]["path"])
-
-    
 # In any case configuration should be valid at this point or
 # the script should have exited.
 
-if (cfg["jvm"]["classPath"] == "dynamic"):
+# if "dynamic" classpath check the hash and replace the keyword with it
+if (cfg["application"]["classPath"] == "dynamic"):
     logger.debug("Dynamic class path used")
-    # TODO: replace exit by launching the cp generetor.
-    exit(0);
+
+    h = hashlib.sha256()
+    h.update(cfg["launcher"]["genInput"].encode('utf-8'))
+    # launcher.generator is parsed value and so it is turned
+    # into form of a list
+    h.update(cfg["launcher"]["generator"][0].encode('utf-8'))
+    hexd = h.hexdigest()
+
+    # compare hashes of generator inputs
+    if (hexd != cfg["launcher"]["cpHash"]):
+        args = list(cfg["launcher"]["generator"])
+        args.extend(cfg["launcher"]["genInput"])
+
+        # run classpath generator
+        logger.info("Generating class path with use of external process.")
+        logger.info(args)
+
+        generator = sp.Popen(args, stderr=sp.PIPE, stdout=sp.PIPE)
+        # stdout, stderr = process.comunicate()
+        cfg["launcher"]["genPath"], stderr = generator.comunicate()
+        if (generator.returncode != 0):
+            logger.error("Generating dynamic class path failed. Generating"
+                       + " process exited with return code %d. Exiting ...",
+                       generator.returncode)
+            logger.error("STDERR of generator process - dump:\n%s", stderr)
+            exit(2);
+
+        # store and cache newly generated classpath
+        cache_dynamic_cp(cfg["launcher"]["genPath"], hexd)
+
+    # get classpath usable in following code
+    # already expanded classpath is expected
+    cfg["jvm"]["classPath"] = shlex.split(cfg["launcher"]["genPath"])
 
 # launch the application
 args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], ["-classpath"],
-        cfg["jvm"]["classPath"], cfg["jvm"]["mainClass"],
+        cfg["application"]["classPath"], cfg["application"]["mainClass"],
         cfg["application"]["arguments"]
 ]
 

@@ -15,6 +15,12 @@ LOG_FILE_NAME="launcher.log"
 PATH_TO_CFG_FILES="./resources"
 PATH_TO_LOG_FILES="./logs"
 
+# options to configure behavior
+SKIP_TEST=false       # add 'SKIP_TEST=true' to specific test case
+SKIP_RETCODE=3        # change value if it colides with $? of application
+RUN_COVERAGE=false    # set to 'true' if code coverage should be made
+DEBUG_TESTED=true
+
 # array of specific subdirectories
 declare -A SUBDIRS
 SUBDIRS["XDG_CONFIG_DIRS"]="$LAUNCHER"
@@ -23,26 +29,50 @@ SUBDIRS["XDG_CONFIG_HOME"]="$LAUNCHER"
 SUBDIRS["XDG_DATA_HOME"]="$APP_NAME"
 SUBDIRS["XDG_CACHE_HOME"]="$APP_NAME"
 
-# definition of test cases
+# definition of inner functions
 function __runTest {
-  eval "./$APP_NAME" > "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
-                    2> "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stderr" 
+  EXPECTED="${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}/expected.out"
+  if [ ! -f "$EXPECTED" ]; then
+    echo "File with expected results missing!"
+    return "$SKIP_RETCODE"
+  fi
+
+  if [ "$DEBUG_TESTED" = true ]; then
+    ./$APP_NAME
+  else 
+    ./$APP_NAME > "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
+               2> "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stderr" 
+  fi
+
 
   echo $? >> "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout"
 
   # if there is a log, move it
   if [ -f "./$LOG_FILE_NAME" ]; then
     mv -T "./$LOG_FILE_NAME" \
-             "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.$LOG_FILE_NAME"
+          "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.$LOG_FILE_NAME"
   fi
 
-  diff "$1" "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
-      &> "/dev/null"
+  diff "$EXPECTED" \
+       "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}.stdout" \
+    &> "/dev/null"
 
   return "$?"
 }
 
 function __initTest {
+  # check if there are resources for test
+  if [ "$SKIP_TEST" = true ]; then
+    SKIP_TEST=false
+    return "$SKIP_RETCODE"
+  fi
+
+  # check if there are resources for test
+  if [ ! -d "${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}" ]; then
+    echo "Missing resources for '${FUNCNAME[1]}' test."
+    return "$SKIP_RETCODE"
+  fi
+
   # combine all paths so they can be created in single loop
   DIRS="$XDG_DATA_DIRS:$XDG_CONFIG_DIRS"
   DIRS="$DIRS:$XDG_DATA_HOME:$XDG_CONFIG_HOME:$XDG_CACHE_HOME"
@@ -54,14 +84,14 @@ function __initTest {
 
     for D in $DIRS
     do
-      mkdir -p -v "${D%/}/$APP_NAME"
-      mkdir -p -v "${D%/}/$LAUNCHER"
+      mkdir -p "${D%/}/$APP_NAME"
+      mkdir -p "${D%/}/$LAUNCHER"
     done
     IFS=$SEP
   fi
 
-  if [ ! -d "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}" ]; then
-    mkdir -p "${PATH_TO_LOG_FILES%/}/${FUNCNAME[1]}"
+  if [ ! -d "$PATH_TO_LOG_FILES" ]; then
+    mkdir -p "$PATH_TO_LOG_FILES"
   fi
 
   # clean after previous tests
@@ -105,17 +135,54 @@ function __initTest {
   return 0
 }
 
+# put test cases here :
+
 function BasicTest {
-  __initTest
-  __runTest "${PATH_TO_CFG_FILES%/}/$FUNCNAME/expected.out"
+   SKIP_TEST=true
+  __initTest && __runTest 
   return "$?"
 }
 
+function StopProcessingTest {
+  # SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function WrongMainTest {
+   SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function WrongJvmBinaryTest {
+   SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function DynamicClPathTest {
+   SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function MissingGeneratorTest {
+   SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function FailedGeneratingClPathTest {
+   SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
 
 ###=== start script ===###
 
 if [ ! -d "$PATH_TO_CFG_FILES" ]; then
-  echo "Havent found directory with cfg files for ndividual test cases!" \
+  echo "Haven't found directory with cfg files for individual test cases!" \
        "Exiting ..."
   exit 1
 fi
@@ -178,25 +245,39 @@ if [ -n "$TEST_ENV" ] ; then
   echo "-------------------------------------------------------------------------------"
 fi
 
-# export XDG for tests to run in 
+# export XDG and other environmental variables for tests to run in 
 export XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_DIRS XDG_CONFIG_DIRS
+
+if [ "$RUN_COVERAGE" = true ]; then
+  export COVERAGE_PROCESS_START="${PWD%/}/resources/coverage/.coveragerc"
+  export PYTHONPATH="${PWD%/}/resources/coverage${PYTHONPATH:+:}${PYTHONPATH:-}"
+fi 
 
 #run all the test cases
 echo "Running following test cases:"
-FUNCTIONS=`grep -e "^function [^_]" $0 | awk -F ' ' '{print $2}'`
+FUNCTIONS=`grep -e "^function [^_]" $0 | awk -F ' ' '{print $2}' | tr '\n' ' '`
 
-for TEST_CASE in "$FUNCTIONS"
+for TEST_CASE in $FUNCTIONS
 do
   RESULT="Failed!"
   eval "$TEST_CASE"
-  if [ "$?" == 0 ]; then
+  RC=$?
+  if [ "$RC" == 0 ]; then
     RESULT="Pass ..."
+  elif [ "$RC" == "$SKIP_RETCODE" ]; then
+    RESULT="Skip ..."
   fi
 
   echo "$TEST_CASE: $RESULT"
 done
 
+echo "-------------------------------------------------------------------------------"
 
+if [ "$RUN_COVERAGE" = true ]; then
+  unset PYTHONPATH COVERAGE_PROCESS_START
+  coverage combine
+  coverage html
+  coverage report
+fi
 
-
-
+exit 0
