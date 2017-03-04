@@ -1,0 +1,2 @@
+/usr/bin/java -DsystemOption=vlaue -classpath /dynamic/predefined/classpath/from/cache helloworld.HelloWorld HelloWorld! "Ahoja Marvel"
+0

@@ -67,6 +67,11 @@ function __initTest {
     return "$SKIP_RETCODE"
   fi
 
+  # check if there is symlink in place othewise create one
+  if [ ! -h "./$APP_NAME" ]; then
+    ln -s -T "./launcher.py" "$APP_NAME"
+  fi
+
   # check if there are resources for test
   if [ ! -d "${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}" ]; then
     echo "Missing resources for '${FUNCNAME[1]}' test."
@@ -129,16 +134,45 @@ function __initTest {
 
     # copy the file
     cp -T "${PATH_TO_CFG_FILES%/}/${FUNCNAME[1]}/$FL" \
-          "$DEST/$SUBDIR/$CFG_FILE"
+          "${DEST%/}/$SUBDIR/$CFG_FILE"
+
+    if [ "$?" != 0 ]; then
+      echo "Init error!"
+      return "$SKIP_RETCODE"
+    fi
+
   done
 
   return 0
 }
 
+function __appendToFile {
+  FL_PATH="$1"
+  APPENDIX="$2"
+
+  if [ -z "$FL_PATH" -o ! -f "$FL_PATH" ]; then
+    echo "Init error!"
+    return "$SKIP_RETCODE"
+  fi
+
+  if [ -z "$APPENDIX" ]; then
+    echo "return empty appendix"
+    return 0
+  fi
+
+  echo "$APPENDIX" >> "$FL_PATH"
+}
+
 # put test cases here :
 
 function BasicTest {
-   SKIP_TEST=true
+  # SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function CorruptedFileTest {
+  # SKIP_TEST=true
   __initTest && __runTest 
   return "$?"
 }
@@ -149,33 +183,81 @@ function StopProcessingTest {
   return "$?"
 }
 
-function WrongMainTest {
-   SKIP_TEST=true
-  __initTest && __runTest 
-  return "$?"
-}
-
 function WrongJvmBinaryTest {
-   SKIP_TEST=true
+  # SKIP_TEST=true
   __initTest && __runTest 
   return "$?"
 }
 
 function DynamicClPathTest {
-   SKIP_TEST=true
-  __initTest && __runTest 
+  # SKIP_TEST=true
+  TARGET=`cut -d":" -f1 <<< "${XDG_DATA_DIRS}"`
+
+  __initTest && \
+  __appendToFile "${TARGET%/}/${SUBDIRS['XDG_DATA_DIRS']}/$CFG_FILE" \
+                 "generator=./resources/${FUNCNAME}/generator.sh" && \
+  __runTest 
+
   return "$?"
 }
 
 function MissingGeneratorTest {
-   SKIP_TEST=true
+  # SKIP_TEST=true
+  __initTest && __runTest 
+  return "$?"
+}
+
+function WrongGeneratorTest {
+  # SKIP_TEST=true
   __initTest && __runTest 
   return "$?"
 }
 
 function FailedGeneratingClPathTest {
-   SKIP_TEST=true
-  __initTest && __runTest 
+  # SKIP_TEST=true
+  TARGET=`cut -d":" -f1 <<< "${XDG_DATA_DIRS}"`
+
+  __initTest && \
+  __appendToFile "${TARGET%/}/${SUBDIRS['XDG_DATA_DIRS']}/$CFG_FILE" \
+                 "generator=./resources/${FUNCNAME}/generator.sh" && \
+  __runTest 
+
+  return "$?"
+}
+
+function ChangedGeneratorTest {
+  # SKIP_TEST=true
+  TARGET=`cut -d":" -f1 <<< "${XDG_DATA_DIRS}"`
+
+  __initTest && \
+  __appendToFile "${TARGET%/}/${SUBDIRS['XDG_DATA_DIRS']}/$CFG_FILE" \
+                 "generator=./resources/${FUNCNAME}/generator.sh" && \
+  __runTest 
+
+  return "$?"
+}
+
+function ChangedGeneratorInputTest {
+  # SKIP_TEST=true
+  TARGET=`cut -d":" -f1 <<< "${XDG_DATA_DIRS}"`
+
+  __initTest && \
+  __appendToFile "${TARGET%/}/${SUBDIRS['XDG_DATA_DIRS']}/$CFG_FILE" \
+                 "generator=./resources/${FUNCNAME}/generator.sh" && \
+  __runTest 
+
+  return "$?"
+}
+
+function CorrectCacheTest {
+  # SKIP_TEST=true
+  TARGET=`cut -d":" -f1 <<< "${XDG_DATA_DIRS}"`
+
+  __initTest && \
+  __appendToFile "${TARGET%/}/${SUBDIRS['XDG_DATA_DIRS']}/$CFG_FILE" \
+                 "generator=./resources/${FUNCNAME}/generator.sh" && \
+  __runTest 
+
   return "$?"
 }
 

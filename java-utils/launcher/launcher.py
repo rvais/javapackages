@@ -42,26 +42,30 @@ launcher = "launcher"
 launcher_py = "launcher.py"
 cfg_name = "jlauncher.ini"
 
+# if True, prints output to stdout insted of launching application
+# usefull for testing
 halt_launch = True
 
-# efective configuration 
+# efective configuration - do not remove
 cfg = dict()
 
 # required and optional values in configuration
-cfg_requires = {
+# section : [ list of fields in that section]
+cfg_requires = { # minimum in config for launcher to work
     "jvm" : ["jvmBinary"], # , "", ""
     "application" : ["classPath", "mainClass"] 
 }
 
-cfg_optionals = {
+cfg_optionals = { # what launcher uses if possible
     "jvm" : ["options"], # , "", ""
-    "application" : ["arguments"] 
-    
+    "application" : ["arguments"], 
+    "launcher" : ["cpHash", "genPath"]
 }
 
 # values that should be parsed during processing
 cfg_parse = {
-    "launcher" : ["stopFurtherConfigProcessing", "enableAbrt", "generator"],
+    "launcher" : ["stopFurtherConfigProcessing", "enableAbrt", "generator",
+                  "genInput", "genPath"],
     "jvm" : ["jvmBinary", "options"], # , "", ""
     "application" : ["arguments", "classPath", "mainClass"] 
 }
@@ -209,6 +213,7 @@ def process_configuration(config_parser, cfg):
         for field, value in config_parser[section].items():
             if (section == "application" and field == "classPath" and
                     value == "dynamic"):
+                cfg[section][field] = value
                 continue
             
             if (section in cfg_parse and field in cfg_parse[section]):
@@ -324,6 +329,15 @@ def validate_cfg(cfg):
     logger.info("Validating configuration for required values.")
     cfg_valid = True
 
+    if ("application" in cfg and "classPath" in  cfg["application"] and 
+            cfg["application"]["classPath"] == "dynamic"):
+        new_requires = ["generator", "genInput"]
+
+        if ("launcher" not in cfg_requires):
+            cfg_requires["launcher"] = new_requires
+        else :
+            cfg_requires["launcher"].extend(new_requires)
+
     for section, fields in cfg_requires.items():
         if ((section not in cfg) or
                 (not isinstance(cfg[section], dict))):
@@ -342,27 +356,14 @@ def validate_cfg(cfg):
 
             # if classpath is supposed to be dynamic there are more
             # required fields 
-            if (section == "application" and
-                    field == "classPath" and 
-                    cfg[section][field] == "dynamic"):
-
-                new_requires = ["generator", "genInput"]
-                new_optionals = ["cpHash", "genPath"]
-
-                if ("launcher" not in cfg_requires):
-                    cfg_requires["launcher"] = new_requires
-                else :
-                    cfg_requires["launcher"].extend(new_requires)
-
-                if ("launcher" not in cfg_optional):
-                    cfg_optionals["launcher"] = new_optionals
-                else :
-                    cfg_optionals["launcher"].extend(new_optionals)
-
+            
             if ((section == "jvm" and field == "jvmBinary") or
                     (section == "launcher" and field == "generator")):
                 if (not is_executable(cfg[section][field][0])):
                     # cfg[section][field] is a list so "[0]" is necessary
+                    logger.error("Path '%s' in section '%s' and field '%s' "
+                               + "does not lead to executable file.",
+                                cfg[section][field][0], section, field)
                     cfg_valid = False
                     break
 
@@ -405,9 +406,10 @@ def cache_dynamic_cp(classpath, digest, path=None):
             return None
 
     # create dictionary of values to store in cache file
-    iniParser = get_ini_parser() 
-    iniParser["launcher"]["cpHash"] = digest
-    iniParser["launcher"]["genPath"] = classpath
+    iniParser = get_ini_parser()
+    iniParser.add_section("launcher")
+    iniParser.set("launcher", "cpHash", digest)
+    iniParser.set("launcher", "genPath", classpath)
 
     try:
         with open(path, 'w') as config:
@@ -479,7 +481,10 @@ for fl in cfg_file_list:
     except:
         logger.error("Configuration could not be parsed."
                      + " Stopping further processing.")
-        break
+        break # should 'continue' be there insted of 'break' that stops
+              # processing of remaining configs ?
+
+##    pudb.set_trace()
 
     # proces the values
     if (not process_configuration(iniParser, cfg_fs[fl]["cfg"])):
@@ -488,9 +493,8 @@ for fl in cfg_file_list:
                 cfg_fs[fl]["path"])
         continue
 
-##    pudb.set_trace()
 
-    if (("launcher" in cfg_fs[fl]) and
+    if (("launcher" in cfg_fs[fl]["cfg"]) and
             ("stopFurtherConfigProcessing" in 
                 cfg_fs[fl]["cfg"]["launcher"]) and
             (cfg_fs[fl]["cfg"]["launcher"]["stopFurtherConfigProcessing"]
@@ -522,14 +526,17 @@ if (cfg["application"]["classPath"] == "dynamic"):
     logger.debug("Dynamic class path used")
 
     h = hashlib.sha256()
-    h.update(cfg["launcher"]["genInput"].encode('utf-8'))
+    h.update(" ".join(cfg["launcher"]["genInput"]).encode('utf-8'))
     # launcher.generator is parsed value and so it is turned
     # into form of a list
-    h.update(cfg["launcher"]["generator"][0].encode('utf-8'))
+    h.update(" ".join(cfg["launcher"]["generator"]).encode('utf-8'))
     hexd = h.hexdigest()
 
     # compare hashes of generator inputs
     if (hexd != cfg["launcher"]["cpHash"]):
+        logger.info("Hash of generator and it's input des not match "
+                  + "or cached classpath has not been cached yet.")
+
         args = list(cfg["launcher"]["generator"])
         args.extend(cfg["launcher"]["genInput"])
 
@@ -537,9 +544,14 @@ if (cfg["application"]["classPath"] == "dynamic"):
         logger.info("Generating class path with use of external process.")
         logger.info(args)
 
-        generator = sp.Popen(args, stderr=sp.PIPE, stdout=sp.PIPE)
+        generator = subprocess.Popen(args, stderr=subprocess.PIPE,
+             stdout=subprocess.PIPE)
         # stdout, stderr = process.comunicate()
-        cfg["launcher"]["genPath"], stderr = generator.comunicate()
+        stdout , stderr = generator.communicate()
+
+        cfg["launcher"]["genPath"] = str(stdout, "utf-8")
+        stderr = str(stderr, "utf-8")
+
         if (generator.returncode != 0):
             logger.error("Generating dynamic class path failed. Generating"
                        + " process exited with return code %d. Exiting ...",
@@ -550,9 +562,11 @@ if (cfg["application"]["classPath"] == "dynamic"):
         # store and cache newly generated classpath
         cache_dynamic_cp(cfg["launcher"]["genPath"], hexd)
 
-    # get classpath usable in following code
+        # get classpath usable in following code - parse the value
+        cfg["launcher"]["genPath"] = parse_cfg_value(cfg["launcher"]["genPath"])
+
     # already expanded classpath is expected
-    cfg["jvm"]["classPath"] = shlex.split(cfg["launcher"]["genPath"])
+    cfg["application"]["classPath"] = cfg["launcher"]["genPath"]
 
 # launch the application
 args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], ["-classpath"],

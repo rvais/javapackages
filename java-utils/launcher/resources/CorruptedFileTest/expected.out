@@ -1,0 +1,2 @@
+/usr/bin/java -classpath /home/rvais/PersonalProjects/HelloWorld/dist/HelloWorld.jar helloworld.HelloWorld
+0

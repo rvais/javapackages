@@ -1,0 +1,2 @@
+/usr/bin/java -classpath /dynamic/classpath/from/generator helloworld.HelloWorld
+0

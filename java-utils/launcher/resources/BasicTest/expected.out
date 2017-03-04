@@ -1,2 +1,2 @@
-/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.121-1.b14.fc24.x86_64/bin/java -DsystemOption=vlaue -classpath /home/rvais/PersonalProjects/HelloWorld/dist/HelloWorld.jar helloworld.HelloWorld HelloWorld! "Ahoja Marvel" indentedArgument
+/usr/bin/java -DsystemOption=vlaue -classpath /home/rvais/PersonalProjects/HelloWorld/dist/HelloWorld.jar helloworld.HelloWorld HelloWorld! "Ahoja Marvel" indentedArgument
 0

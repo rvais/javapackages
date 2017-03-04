@@ -1,2 +1,2 @@
-/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.121-1.b14.fc24.x86_64/bin/java -classpath /foo/bar/BIG helloworld.HelloWorld
+/usr/bin/java -classpath /foo/bar/BIG helloworld.HelloWorld
 0

@@ -1,0 +1,2 @@
+/usr/bin/java -DsystemOption=vlaue -classpath /dynamic/classpath/from/different/input helloworld.HelloWorld HelloWorld! "Ahoja Marvel" indentedArgument
+0
