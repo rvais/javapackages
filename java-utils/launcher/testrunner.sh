@@ -81,8 +81,9 @@ if [ "$RUN_COVERAGE" = true ]; then
   export COVERAGE_PROCESS_START="${PWD%/}/resources/coverage/.coveragerc"
   export PYTHONPATH="${PWD%/}/resources/coverage${PYTHONPATH:+:}${PYTHONPATH:-}"
 
-  printenv 
-  read -n 1
+#  printenv 
+#  read -n 1
+
 fi 
 
 # discover test cases  

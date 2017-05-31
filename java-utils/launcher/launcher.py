@@ -70,23 +70,13 @@ cfg_parse = {
     "application" : ["arguments", "classPath", "mainClass"] 
 }
 
+# argumentsgiven to launcher intended for launched application
+other_args = list()
+
 # definiton of functions_______________________________________________
 
 def print_help():
     print("help()")
-
-
-
-# taken from stack overflow
-# <http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python>
-def mkdirs(path):
-    try:
-        os.makedirs(path)
-    except OSError as exc:  # Python > 2.5
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
 
 
 
@@ -388,41 +378,6 @@ def validate_cfg(cfg):
     return True
    
 
-
-def cache_dynamic_cp(classpath, digest, path=None):
-    # check or create the path for file
-    if (path is None or len(path) == 0):
-        d = os.path.join(xdg_cfg["XDG_CACHE_HOME"], prog)
-        path = os.path.join(d, cfg_name)
-
-    # directory for cache file must exist
-    if (not os.path.isdir(d)):
-        try:
-            mkdirs(d)
-        except:
-            logger.error("Directory '%s' used to store cached config"
-                + " file for launching application next time"
-                + " does not exist and could not be created.", d)
-            return None
-
-    # create dictionary of values to store in cache file
-    iniParser = get_ini_parser()
-    iniParser.add_section("launcher")
-    iniParser.set("launcher", "cpHash", digest)
-    iniParser.set("launcher", "genPath", classpath)
-
-    try:
-        with open(path, 'w') as config:
-            iniParser.write(config)
-        logger.info("Cached config file created")
-
-    except:
-        logger.error("Could not create or write into cache config"
-                + " file '%s' used to store processed configuration.",
-                path)
-
-
-    return None
  
 # Main_________________________________________________________________
 logger = get_logger()
@@ -431,17 +386,23 @@ set_xdg_cfg(xdg_cfg);
 
 # get program neame form symbolic link or first argument
 arg0 = os.path.basename(sys.argv[0])
+sysargs = sys.argv[1:]
 
 if (arg0 == launcher_py or arg0 == ''):
-    if (len(sys.argv) <= 1 or 
-        (len(sys.argv[1]) <= 0 or sys.argv[1].startswith('-'))):
+    if (len(sysargs) < 1 or 
+          (len(sysargs[0]) <= 0 or sysargs[0].startswith('-'))):
         print_help()
         exit(1);
-    arg0 = os.path.basename(sys.argv[1])
+    arg0 = os.path.basename(sysargs[0])
+    sysargs = sysargs[1:]
 
-for argument in sys.argv:
+other_args.extend(sysargs)
+
+for argument in sysargs:
     if (argument == "--jlauncher-test"):
         halt_launch = True
+        other_args.remove(argument)
+        break
 
 prog = arg0
 logger.debug("Program name resolved: '%s'", prog)
@@ -575,7 +536,7 @@ if (cfg["application"]["classPath"] == "dynamic"):
 # launch the application
 args = [cfg["jvm"]["jvmBinary"], cfg["jvm"]["options"], ["-classpath"],
         cfg["application"]["classPath"], cfg["application"]["mainClass"],
-        cfg["application"]["arguments"]
+        cfg["application"]["arguments"], other_args
 ]
 
 # "jvm.options" and "application.arguments" are not required and they
