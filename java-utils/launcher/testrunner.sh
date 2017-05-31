@@ -72,8 +72,9 @@ function runTest {
 #=== start script =============================================================
 set -e
 
-if [ -f "$LAUNCHER" ]; then
+if [ ! -f "$LAUNCHER" ]; then
   echo "File '$LAUNCHER' not found. Abort!"
+  exit 2
 fi
 
 if [ ! -h "$APP_NAME" ]; then
