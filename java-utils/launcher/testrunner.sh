@@ -5,9 +5,9 @@
 #
 #==============================================================================
 #
-# LAUNCHER="launcher"                 # 
 
 # definiton of variables 
+LAUNCHER="./launcher.py"            # for creating a symling if it doesnt exists
 APP_NAME="program"                  # name of launcher's symlink used in tests
 LOG_FILE_NAME="launcher.log"        # name of log for launcher
 COVERAGE_FILE_NAME="coverage.log"   # file for redirection of py covaerage stdout
@@ -21,12 +21,14 @@ RUN_COVERAGE=true     # if 'true' code coverage will be made
 DEBUG_TESTED=false    # if 'true' stdout & stderr won't be redirected 
 
 function runTest {
-  local test_name="$1"
+  local test_name="$1" \
+        arguments=""
   local expected_out="${PATH_TO_TESTS%/}/${test_name%/}/expected.out" \
         expected_err="${PATH_TO_TESTS%/}/${test_name%/}/expected.err" \
         env_script="${PATH_TO_TESTS%/}/${test_name%/}/$ENV_FILE" \
         out="${PATH_TO_LOG_FILES%/}/$test_name.stdout" \
-        err="${PATH_TO_LOG_FILES%/}/$test_name.stderr"
+        err="${PATH_TO_LOG_FILES%/}/$test_name.stderr" \
+        additional_args_file="${PATH_TO_TESTS%/}/${test_name%/}/addargs"
 
   if [ ! -f "$env_script" ]; then
     echo "# Script for setting up environmental variables missing!"
@@ -37,15 +39,19 @@ function runTest {
   touch $expected_err   # if empty stderr is expected and file missing
   export $($env_script) 
 
+  if [ -f $additional_args_file ]; then
+    arguments="$(cat $additional_args_file)"
+  fi
+
   if [ ! -f "$expected_out" -o ! -f "$expected_err" ]; then
     echo "# File with expected output (stdout or stderr) missing!"
     return $SKIP_RET_CODE
   fi
 
   if [ "$DEBUG_TESTED" = true ]; then
-    ./$APP_NAME "--jlauncher-test"
+    ./$APP_NAME "--jlauncher-test" $arguments
   else 
-    ./$APP_NAME "--jlauncher-test" > "$out" 2> "$err"
+    ./$APP_NAME "--jlauncher-test" $arguments > "$out" 2> "$err"
   fi
 
   echo $? >> "$out"
@@ -66,6 +72,14 @@ function runTest {
 #=== start script =============================================================
 set -e
 
+if [ -f "$LAUNCHER" ]; then
+  echo "File '$LAUNCHER' not found. Abort!"
+fi
+
+if [ ! -h "$APP_NAME" ]; then
+  ln -s -T "$LAUNCHER" "$APP_NAME"
+fi
+
 if [ ! -d "$PATH_TO_TESTS" ]; then
   echo "Haven't found directory with cfg files for individual test cases!" \
        "Exiting ..."
@@ -80,17 +94,13 @@ fi
 if [ "$RUN_COVERAGE" = true ]; then
   export COVERAGE_PROCESS_START="${PWD%/}/resources/coverage/.coveragerc"
   export PYTHONPATH="${PWD%/}/resources/coverage${PYTHONPATH:+:}${PYTHONPATH:-}"
-
-#  printenv 
-#  read -n 1
-
 fi 
 
 # discover test cases  
 DIRECTORIES=`ls "$PATH_TO_TESTS"`
 
 set +e
-
+# count the test cases for TAP
 TEST_COUNT=0
 for TEST_CASE in $DIRECTORIES
 do
@@ -104,11 +114,9 @@ done
 echo "TAP version 13"
 echo "1..$TEST_COUNT"
 
-TEST_COUNT=0
+TEST_COUNT=0 # need indexes
 for TEST_CASE in $DIRECTORIES
 do
-
-#  echo $TEST_CASE
   if [ ! -d "${PATH_TO_TESTS%/}/$TEST_CASE" -o ${TEST_CASE:(-4)} != "Test" ]; then
     continue
   fi
@@ -126,14 +134,14 @@ do
   echo "$RESULT $TEST_COUNT - $TEST_CASE # test return code: $STATUS"
 done
 
-# set -e
+set -e
 if [ "$RUN_COVERAGE" = true ]; then
   COVERAGE_LOG="${PATH_TO_LOG_FILES%/}/$COVERAGE_FILE_NAME" 
   unset PYTHONPATH COVERAGE_PROCESS_START
   coverage combine &> "$COVERAGE_LOG"
-  coverage html &>> "$COVERAGE_LOG"
+  coverage html -d ./coverage/htmlcov &>> "$COVERAGE_LOG"
   coverage report &>> "$COVERAGE_LOG"
 fi
-# set +e
+set +e
 
 exit 0
