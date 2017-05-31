@@ -44,7 +44,7 @@ cfg_name = "jlauncher.ini"
 
 # if True, prints output to stdout insted of launching application
 # usefull for testing
-halt_launch = True
+halt_launch = False
 
 # efective configuration - do not remove
 cfg = dict()
@@ -439,6 +439,10 @@ if (arg0 == launcher_py or arg0 == ''):
         exit(1);
     arg0 = os.path.basename(sys.argv[1])
 
+for argument in sys.argv:
+    if (argument == "--jlauncher-test"):
+        halt_launch = True
+
 prog = arg0
 logger.debug("Program name resolved: '%s'", prog)
 
@@ -481,8 +485,8 @@ for fl in cfg_file_list:
     except:
         logger.error("Configuration could not be parsed."
                      + " Stopping further processing.")
-        break # should 'continue' be there insted of 'break' that stops
-              # processing of remaining configs ?
+        logger.error("Aborting launch.")
+        exit(2)
 
 ##    pudb.set_trace()
 

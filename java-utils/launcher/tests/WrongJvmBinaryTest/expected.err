@@ -1,0 +1,2 @@
+[ERROR]: Path '/usr/bin/foo/java' in section 'jvm' and field 'jvmBinary' does not lead to executable file.
+[ERROR]: Final configuration does not have all the required values. Please verify configuration files.

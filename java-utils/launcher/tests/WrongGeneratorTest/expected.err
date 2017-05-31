@@ -1,0 +1,2 @@
+[ERROR]: Path '/foo/bar/nonexistend/generator.sh' in section 'launcher' and field 'generator' does not lead to executable file.
+[ERROR]: Final configuration does not have all the required values. Please verify configuration files.
